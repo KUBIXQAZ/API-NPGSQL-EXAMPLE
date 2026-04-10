@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
+using System.Data;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -133,7 +134,7 @@ namespace API_NPGSQL_EXAMPLE.Controllers
                     Expires = DateTimeOffset.UtcNow.AddDays(30)
                 });
 
-                return Ok(new RegisterResponse
+                return Ok(new AuthResponse
                 {
                     Id = userId,
                     Email = request.Email,
@@ -154,7 +155,73 @@ namespace API_NPGSQL_EXAMPLE.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
+            try
+            {
+                await using NpgsqlConnection conn = new NpgsqlConnection(_connectionString);
+                await conn.OpenAsync();
 
+                string selectPasswordQuery = @"
+                    SELECT id, username, email, password_hash FROM users
+                    WHERE email = @Identifier OR username = @Identifier
+                    LIMIT 1;";
+                await using NpgsqlCommand cmd = new NpgsqlCommand(selectPasswordQuery, conn);
+                cmd.Parameters.AddWithValue("Identifier", request.Identifier);
+
+                await using NpgsqlDataReader reader = await cmd.ExecuteReaderAsync();
+
+                if (!(await reader.ReadAsync()))
+                {
+                    return Unauthorized(new
+                    {
+                        message = "Username, email or password is incorrect."
+                    });
+                }
+
+                int id = reader.GetFieldValue<int>("id");
+                string username = reader.GetFieldValue<string>("username");
+                string email = reader.GetFieldValue<string>("email");
+                string passwordHash = reader.GetFieldValue<string>("password_hash");
+
+                await reader.CloseAsync();
+
+                bool isPasswordCorrect = BCrypt.Net.BCrypt.Verify(request.Password, passwordHash);
+
+                if (!isPasswordCorrect)
+                {
+                    return Unauthorized(new
+                    {
+                        message = "Username, email or password is incorrect."
+                    });
+                }
+
+                string jwt = GenerateJwtToken(
+                    id.ToString(),
+                    username,
+                    email);
+
+                Response.Cookies.Append("session", jwt, new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = true,
+                    SameSite = SameSiteMode.Strict,
+                    Expires = DateTimeOffset.UtcNow.AddDays(30)
+                });
+
+                return Ok(new AuthResponse
+                {
+                    Id = id,
+                    Email = email,
+                    Username = username,
+                    Token = jwt
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Login failed. Identifier={Identifier}",
+                    request.Identifier);
+                return Problem("Internal server error.");
+            }
         }
     }
 }

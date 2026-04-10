@@ -1,6 +1,6 @@
 ﻿namespace API_NPGSQL_EXAMPLE.Models
 {
-    public class RegisterResponse
+    public class AuthResponse
     {
         public int Id { get; set; }
         public string Email { get; set; } = string.Empty;
