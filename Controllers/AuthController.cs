@@ -1,5 +1,6 @@
 ﻿using API_NPGSQL_EXAMPLE.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 using System.Data;
@@ -58,6 +59,7 @@ namespace API_NPGSQL_EXAMPLE.Controllers
             return jwt;
         }
 
+        [EnableRateLimiting("auth")]
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
@@ -152,6 +154,7 @@ namespace API_NPGSQL_EXAMPLE.Controllers
             }
         }
 
+        [EnableRateLimiting("auth")]
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
